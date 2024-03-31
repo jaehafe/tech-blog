@@ -7,8 +7,8 @@ import { getAllTags, sortPosts, sortTagsByCount } from '@/lib/utils';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'My blog',
-  description: 'This is a description',
+  title: '전투일지',
+  description: '수행사례',
 };
 
 const POSTS_PER_PAGE = 5;
