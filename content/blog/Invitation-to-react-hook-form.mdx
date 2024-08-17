@@ -1,9 +1,425 @@
 ---
-title: react-hook-form으로의 초대
-description: react-hook-form으로의 초대
-date: 2024-03-31
-tags: ['react-hook-form', 'blog']
+title: react-hook-form, zod로의 초대
+description: react-hook-form, zod로의 초대
+date: 2024-08-17
+tags: ['react-hook-form', 'zod']
 published: true
 ---
 
-<Callout type="warning">React-Hook-Form</Callout>
+<Callout>React-Hook-Form</Callout>
+
+## 1. 로그인 페이지 - react-hook-form(Controller) + zod
+
+## 2. zod validation조건문 처리 - z.extend
+
+## 3. useFieldArray
+
+### 예시1. 로그인 페이지
+
+로그인 화면이 있는 페이지를 만들어보겠습니다.
+아래 사진과 같이 input은 email, password로 구성되어 있습니다.
+
+<Image
+  src="../../assets/images/login-page.png"
+  alt="로그인 화면"
+  width={500}
+  height={300}
+/>
+
+```tsx
+// 이메일
+<Input
+  placeholder="이메일"
+  value={emailValue}
+  onChange={handleChangeEmail}
+/>
+
+// 비밀번호
+<Input
+  placeholder="비밀번호"
+  type="password"
+  value={passwordValue}
+  onChange={handleChangePassword}
+/>
+```
+
+기본 타입은 이렇게 되고, react-hook-form과 zod를 사용해 구현해보겠습니다.
+
+요구사항은 아래와 같습니다.
+
+1. 이메일 input은 이메일 형식(xxx@email.com)이 아니면 error message를 보여주고,
+2. 비밀번호 input은 비밀번호 형식(영문, 숫자, 특수문자 포함 8자 이상)이 아니면 error
+   message를 보여줍니다.
+
+```tsx
+const loginForm = useForm<LoginValidationType>({
+  mode: 'onSubmit',
+  resolver: zodResolver(LoginValidationSchema),
+});
+```
+
+```tsx
+// utils/schema/login
+
+import { z } from 'zod';
+import { VALIDATION_MESSAGES } from '@/utils/validationMessage';
+
+export interface LoginFormSchemaType = z.infer<typeof LoginFormSchema>;
+
+export const LoginValidationSchema = z.object({
+  email: z
+    .string()
+    .email({ message: VALIDATION_MESSAGES.EMAIL_ADDRESS })
+    .refine((value) => {
+      const domain = value.split("@")[1];
+      return !allowedEmailAddress.includes(domain);
+    }, VALIDATION_MESSAGES.EMAIL_ADDRESS)
+    .default(""),
+
+  password: z
+      .string()
+      .refine(
+        (value) => {
+          const isAlphabetValid = /[A-Za-z]/.test(value);
+          const isDigitValid = /\d/.test(value);
+          const isLengthValid = value.length >= 8;
+
+          return isAlphabetValid && isDigitValid && isLengthValid;
+        },
+        {
+          message: "비밀번호가 조건을 충족하지 않습니다.",
+          path: ["password"],
+        },
+      )
+      .default(""),
+});
+```
+
+이렇게 이메일과 비밀번호 input에 대한 validation을 구현하고
+아래와 같이 react hook form을 사용해 input에 적용하면 됩니다.
+
+```tsx
+const form = useForm<LoginFormSchemaType>({
+  mode: 'onSubmit',
+  resolver: zodResolver(LoginValidationSchema),
+});
+
+const handleSubmit = (data: LoginFormSchemaType) => {
+  // mutate
+};
+
+<form onSubmit={form.handleSubmit(handleSubmit)}>
+  <Controller
+    name="email"
+    control={form.control}
+    render={({ field, fieldState }) => {
+      return (
+        <Input
+          placeholder="이메일"
+          {...field}
+          error={!!fieldState.error}
+          errorMessage={fieldState.error?.message}
+        />
+      );
+    }}
+  />
+  <Controller
+    name="password"
+    control={form.control}
+    render={({ field, fieldState }) => {
+      return (
+        <Input
+          placeholder="비밀번호"
+          type="password"
+          {...field}
+          error={!!fieldState.error}
+          errorMessage={fieldState.error?.message}
+        />
+      );
+    }}
+  />
+  <button type="submit">로그인</button>
+</form>;
+```
+
+<hr />
+
+### 예시2 zod validation조건문 처리
+
+zod를 사용해 schema를 만들 때 조건문을 사용할 수 있습니다.
+입력한 비밀번호와 비밀번호 확인이 같은지 확인하는 조건문을 만들어보겠습니다.
+
+```tsx
+import { z } from 'zod';
+import { VALIDATION_MESSAGES } from '@/utils/validationMessage';
+
+export type SignUpFormSchemaType = z.infer<ReturnType<typeof SignUpFormSchema>>;
+
+const allowedEmailAddress = ['example.com', 'test.com'];
+
+export const SignUpFormSchema = (includeConfirmPassword: boolean = false) => {
+  const baseSchema = z.object({
+    email: z
+      .string()
+      .email({ message: VALIDATION_MESSAGES.EMAIL_ADDRESS })
+      .refine((value) => {
+        const domain = value.split('@')[1];
+        return !allowedEmailAddress.includes(domain);
+      }, VALIDATION_MESSAGES.EMAIL_ADDRESS)
+      .default(''),
+
+    password: z
+      .string()
+      .refine(
+        (value) => {
+          const isAlphabetValid = /[A-Za-z]/.test(value);
+          const isDigitValid = /\d/.test(value);
+          const isLengthValid = value.length >= 8;
+
+          return isAlphabetValid && isDigitValid && isLengthValid;
+        },
+        {
+          message: '비밀번호는 8자 이상이며, 영문자와 숫자를 포함해야 합니다.',
+          path: ['password'],
+        }
+      )
+      .default(''),
+  });
+
+  if (includeConfirmPassword) {
+    return baseSchema.extend({
+      confirmPassword: z
+        .string()
+        .min(1, { message: VALIDATION_MESSAGES.ESSENTIAL })
+        .refine((value, ctx) => value === ctx.parent.password, {
+          message: '비밀번호가 일치하지 않습니다.',
+          path: ['confirmPassword'],
+        }),
+    });
+  }
+
+  return baseSchema;
+};
+```
+
+로그인 페이지에서 사용하는 것과 회원가입에서 사용하는 것의 form차이는 confirmPassword의 존재여부이기 때문에
+`includeConfirmPassword`를 조건문 함수를 만들어 사용하면 됩니다.
+
+<hr />
+
+## 예시3 useFieldArray
+
+구현 요구사항은 아래와 같습니다.
+
+1. useFieldArray 훅을 사용해 row를 동적으로 추가하거나 삭제할 수 있는 기능
+2. 세대유형 input은 유니크 값이어야 하기 때문에 중복된 값이 있을 경우 에러 메시지를 보여줍니다.
+
+<Image
+  src="../../assets/images/useFieldArray.png"
+  alt="use-field-array"
+  width={900}
+  height={400}
+/>
+
+먼저 react-hook-form의 useForm과 useFieldArray를 사용해 form을 먼저 만들어 validation을 입혀줍니다.
+
+```tsx
+const roomSettingMethods = useForm<RoomCreateValidationType>({
+  mode: 'onSubmit',
+  resolver: zodResolver(RoomCreateValidationSchema),
+});
+
+const {
+  fields: roomFields,
+  append,
+  remove,
+} = useFieldArray<RoomCreateValidationType>({
+  control: roomSettingMethods.control,
+  name: 'roomSettings',
+});
+```
+
+zod validation은 아래와 같이 구현합니다.
+superRefine을 사용해 중복된 값이 있는지 확인하고, 중복된 값이 있을 경우 에러 메시지를 보여줍니다.
+그리고 중복된 값이 있을 경우 중복된 값의 인덱스에 에러 메시지를 추가해줍니다.
+
+```tsx
+import { z } from 'zod';
+import { VALIDATION_MESSAGES } from '@/utils/validationMessage';
+import { positiveFloatSchema } from './commercialBuildingInfo';
+
+export type RoomCreateValidationType = z.infer<
+  typeof RoomCreateValidationSchema
+>;
+
+export const RoomCreateValidationSchema = z.object({
+  roomSettings: z
+    .array(
+      z.object({
+        floorId: z.coerce.string().nullable(),
+        roomId: z.coerce.string().nullable(),
+        id: z.coerce.string().nullable(),
+
+        // 실 이름
+        name: z
+          .string()
+          .min(1, { message: VALIDATION_MESSAGES.ESSENTIAL })
+          .min(2, { message: VALIDATION_MESSAGES.MIN_LENGTH_2 })
+          .max(50, { message: VALIDATION_MESSAGES.MAX_LENGTH_50 }),
+
+        // 전용 면적
+        area: positiveFloatSchema,
+
+        // 실 용도
+        usage: z.string().min(1, { message: VALIDATION_MESSAGES.ESSENTIAL }),
+      })
+    )
+
+    .superRefine((settings, ctx) => {
+      const nameToIndexMap = new Map();
+
+      settings.forEach((setting, index) => {
+        if (nameToIndexMap.has(setting.name)) {
+          // 중복된 name의 인덱스를 찾음
+          const duplicateIndex = nameToIndexMap.get(setting.name);
+
+          // 중복된 인덱스에 에러 추가
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `실 이름이 중복되었어요.`,
+            path: [duplicateIndex, 'name'], // 중복 발견된 인덱스에 에러 추가
+          });
+
+          // 현재 인덱스에도 에러 추가
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `실 이름이 중복되었어요.`,
+            path: [index, 'name'],
+          });
+        } else {
+          nameToIndexMap.set(setting.name, index);
+        }
+      });
+    }),
+});
+```
+
+다음으로, row를 동적으로 추가하고 삭제하는 기능을 만들어보겠습니다.
+
+```tsx
+const handleAddRow = () => {
+  append({
+    floorId: selectedFloorId!,
+    roomId: uuidv(),
+    id: uuidv(),
+    name: '',
+    area: '',
+    usage: '',
+  });
+};
+```
+
+동적으로 생성될 row인 name, area, usage는 빈 string으로 초기화해줍니다.
+마지막으로, row를 삭제하는 기능의 함수를 만들어볼게요.
+
+```tsx
+const handleDeleteRows = () => {
+  const itemsToDelete = itemsToDeleteMap(roomCheckState); // Map
+  const roomsToDeleteArrayIndex: number[] = []; // 삭제할 row의 인덱스를 담을 배열
+
+  // 앞서 만든 itemsToDeleteMap을 사용해 삭제할 row의 인덱스를 찾아내고
+  // 해당 인덱스를 roomsToDeleteArrayIndex에 담아줍니다
+  if (itemsToDelete.length > 0) {
+    roomFields.forEach((field: any, index) => {
+      const idToDelete = field.roomId ?? field.id;
+
+      if (itemsToDelete.includes(idToDelete)) {
+        roomsToDeleteArrayIndex.push(index);
+      }
+    });
+
+    // roomsToDeleteArrayIndex에 담긴 인덱스를 사용해 해당 row를 삭제합니다
+    remove(roomsToDeleteArrayIndex);
+    // 삭제 후 roomCheckState를 초기화해줍니다
+    handleResetRoomTypeCheck();
+  }
+};
+```
+
+<Image
+  src="../../assets/images/useFieldArray-conflict.png"
+  alt="use-field-array-conflict"
+  width={900}
+  height={400}
+/>
+
+form을 submit할 때는 좀 복잡한데요.
+DB에 저장하지 않고 동적으로 row를 추가한 것들은 remove를 사용해 삭제하고,
+DB에 저장된 상태에서 변경된 row만 update하는 로직을 추가해주면 됩니다.
+핵심은 겹치는 id가 있는지 확인하고, 없으면 바로 업데이트하고, 있으면 삭제 후 업데이트하는 로직입니다.
+
+저는 아래와 같이 구현했습니다.
+
+```tsx
+const handleSubmit = async (data: RoomCreateValidationType) => {
+  const updateRoomInput = data.roomSettings.map((roomSetting) => {
+    return {
+      id: roomSetting.roomId,
+      floorId: selectedFloorId,
+      name: roomSetting.name,
+      area: Number(roomSetting.area),
+      usage: roomSetting.usage,
+    };
+  });
+
+  const nonOverlappingIds = findNonOverlappingIds(fetchRoomsData, roomFields);
+
+  // 겹치는 id가 존재하지 않으면 바로 업데이트
+  // 없으면 삭제 후 업데이트
+  if (nonOverlappingIds.length < 1) {
+    await onUpdateRooms(updateRoomInput);
+    return;
+  }
+
+  // graphql mutation
+  deleteRooms({
+    variables: {
+      roomIds: [...nonOverlappingIds],
+    },
+    async onCompleted(data) {
+      if (data.deleteRooms) {
+        await onUpdateRooms(updateRoomInput);
+      }
+    },
+  });
+};
+```
+
+마지막으로, DB에 저장된 input 값들을 query로 불러와 input에 초기화해줘야 하는 경우가 있습니다.
+이럴 때는 아래와 같이 초기화해주면 됩니다.
+
+```tsx
+React.useEffect(() => {
+  // fetchRoomsData는 DB에 저장된 room 데이터를 불러온 값입니다.
+  // react-hook-form의 reset을 사용해 초기화해줍니다.
+  if (fetchRoomsData && fetchRoomsData?.fetchRooms.length > 0) {
+    const initialValues = {
+      roomSettings: fetchRoomsData.fetchRooms.map((room) => {
+        return {
+          ...room,
+          roomId: room.id,
+          name: room.name ? room.name : '',
+          area: room.area ? String(room.area) : '',
+          usage: room.usage ? room.usage : '',
+        };
+      }),
+    };
+
+    roomSettingMethods.reset(initialValues);
+  }
+}, [fetchRoomsData, selectedFloorId]);
+```
+
+이렇게 react-hook-form의 useFieldArray와 zod 조합으로 동적 row 추가, 제거, 중복된 input을 찾아내는 등 다양한 기능을 쉽게 컨트롤이 가능합니다.
+
+글을 마치겠습니다. 감사합니다
