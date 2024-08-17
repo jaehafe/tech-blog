@@ -1,0 +1,392 @@
+---
+title: useReducer와 custom hook으로 filter state 관리하기
+description: useReducer와 custom hook으로 filter state를 관리하는 방법
+date: 2024-08-18
+tags: ['custom hook', 'useReducer']
+published: true
+---
+
+필터링을 구현하는 요구사항이 있었습니다.
+
+1. 아래 사진과 같이 4개의 필터링 state가 있고, Select로 다중 선택이 가능해야하고,
+2. 적용된 필터가 반영된 chip 각각을 선택하면 제거가 되어야 하고,
+3. 초기화 버튼을 누르면 초기화 되고,
+4. 적용 버튼을 눌러야 필터링이 적용되어야 했습니다.
+
+<Image
+  src="../../assets/images/filter-state/filter-0.png"
+  alt="use-field-array"
+  width={300}
+  height={200}
+/>
+<Image
+  src="../../assets/images/filter-state/filter-1.png"
+  alt="use-field-array"
+  width={300}
+  height={200}
+/>
+<Image
+  src="../../assets/images/filter-state/filter-2.png"
+  alt="use-field-array"
+  width={300}
+  height={200}
+/>
+<Image
+  src="../../assets/images/filter-state/filter-3.png"
+  alt="use-field-array"
+  width={300}
+  height={200}
+/>
+
+아래 코드와 같이, 4개의 필터에 각각 state를 만들어서 관리하면 간단하겠지만,,,
+필터 적용 함수, 초기화 함수, 필터 state를 초기화하는 함수 등을 각 필터마다 따로 만들어야 하고, 코드가 길어질 것 같았습니다.
+
+```tsx
+const [filter1, setFilter1] = useState({
+  value1: [],
+  value2: [],
+  value3: [],
+  value4: [],
+  value5: [],
+});
+
+const [filter2, setFilter2] = useState({
+  value1: [],
+  value2: [],
+  value3: [],
+  value4: [],
+  value5: [],
+});
+
+// ...filter3, 4 생략
+
+// 필터1 적용 함수
+const handleApplyFilter1 = () => {};
+
+// 필터1 초기화 함수
+const handleResetFilter1 = () => {};
+
+// 필터1 임시 적용 함수
+const handleTempApplyFilter1 = () => {};
+
+// 필터2 적용 함수
+const handleApplyFilter1 = () => {};
+
+// 필터2 초기화 함수
+const handleResetFilter1 = () => {};
+
+// 필터2 임시 적용 함수
+const handleTempApplyFilter1 = () => {};
+
+// ...filter3, 4 생략
+```
+
+그래서 useState보다 useReducer를 사용하여 필터 state를 관리하고, custom hook을 만들어서 필터링을 관리하기로 했습니다.
+
+```tsx
+// filter 초기화를 위한 함수
+const createInitialState = (keys) => {
+  return keys.reduce((acc, key) => ({ ...acc, [key]: [] }), {});
+};
+
+const filterReducer = (state, action) => {
+  switch (action.type) {
+    // 필터 적용
+    case 'SET_FILTER':
+      return { ...state, [action.key]: action.payload };
+
+    // 각 필터링 state 제거
+    case 'REMOVE_FILTER_ITEM':
+      return {
+        ...state,
+        [action.key]: state[action.key].filter((_, i) => i !== action.index),
+      };
+
+    // 필터 초기화
+    case 'APPLY_TEMP_FILTER':
+      return action.payload;
+
+    // 필터 초기화
+    case 'RESET_STATE':
+      return createInitialState(Object.keys(state) as T[]);
+
+    default:
+      return state;
+  }
+};
+```
+
+그리고 이 custom hook 사용 방법은 원하는 필터 state key를 배열로 넘겨주면 됩니다.
+
+```tsx
+useGeneralFilterState([
+  'equipmentAttribute', // 필터1
+  'equipmentPurpose', // 필터2
+  'measurementPointAttribute', // 필터3
+  'energySource', // 필터4
+  'effectSpace', // 필터5
+  'communicationAttribute', // 필터6
+] as const);
+
+useGeneralFilterState([
+  'equipmentAttribute', // 필터1
+  'equipmentPurpose', // 필터2
+  'communicationAttribute', // 필터3
+] as const);
+```
+
+useGenernalFilterState에 주입할 필터 state key를 배열로 넘겨주고, 사용하는 곳마다 위와 같이 선언하면 되긴 하지만,
+각 filter를 적용한 custom hook의 비즈니스 로직을 격리해서 캡슐화했습니다. 다음은 적용한 코드입니다.
+
+```tsx
+// useControlFilterState.tsx
+
+import useGeneralFilterState from './use-general-filter-state';
+
+const filterKeys = [
+  'equipmentAttribute', // 센서
+  'equipmentPurpose', // 센서 용도
+  'communicationAttribute', // 통신
+] as const;
+
+export type ControlFilterKey = (typeof filterKeys)[number];
+
+export default function useControlFilterState() {
+  return useGeneralFilterState(filterKeys);
+}
+```
+
+그런데 타입에 문제가 발생했는데요. 어떤 Select는 다중 선택이 가능하고, 어떤 Select는 단일 선택만 가능해야 했습니다.
+그래서 단일 선택이 가능한 filter state key는 `string[]`을 사용하고 아니면 `string[][]`을 사용하도록 했습니다.
+
+```tsx
+export type FilterValue<T> = T extends
+  | 'energySource'
+  | 'equipmentPurpose'
+  | 'measurementPointCollectionType'
+  | 'measurementPointCycle'
+  ? string[]
+  : string[][];
+```
+
+그리고 위에서 만든 filterReducer를 함수로 만들어 사용하면 됩니다.
+
+```tsx
+const applyFilter = useCallback(() => {
+  filterDispatch({ type: 'APPLY_TEMP_FILTER', payload: tempFilterState });
+}, [tempFilterState]);
+
+const resetTempFilter = useCallback(() => {
+  setTempFilterState(initialState);
+}, [initialState]);
+
+const handleRemoveFilter = useCallback(
+  (key: T, index: number) => {
+    filterDispatch({ type: 'REMOVE_FILTER_ITEM', key, index });
+  },
+  [filterState]
+);
+
+const handleRemoveTempFilter = useCallback((key: T, index: number) => {
+  setTempFilterState((prev) => {
+    const newState = { ...prev };
+    const value = newState[key];
+
+    if (
+      key === 'energySource' ||
+      key === 'equipmentPurpose' ||
+      key === 'measurementPointCollectionType' ||
+      key === 'measurementPointCycle'
+    ) {
+      newState[key] = (value as string[]).filter(
+        (_, i) => i !== index
+      ) as FilterValue<T>;
+    } else {
+      newState[key] = (value as string[][]).filter(
+        (_, i) => i !== index
+      ) as FilterValue<T>;
+    }
+
+    return newState;
+  });
+}, []);
+```
+
+이렇게 필터 state를 useReducer와 custom hook을 사용하여 관리하니 필터링 관련 로직을 격리할 수 있었고 코드가 깔끔해졌습니다.
+
+타입을 조금 더 엄격하게 하기 위해 useReducer에 사용되는 state, action의 타입을 정의했습니다. 왜냐면 어떤 key는 string[]이고 어떤 key는 string[][]이기 때문입니다.
+이렇게 해서 `useControlFilterState`의 parameter에는 어떤 key가 올 줄 모르니 filterState와 filterValue는 제네릭으로 선언했습니다.
+
+```tsx
+export type FilterValue<T> = T extends
+  | 'energySource'
+  | 'equipmentPurpose'
+  | 'measurementPointCollectionType'
+  | 'measurementPointCycle'
+  ? string[]
+  : string[][];
+
+export type FilterState<T extends string> = {
+  [K in T]: FilterValue<K>;
+};
+
+type FilterAction<T extends string> =
+  | { type: 'SET_FILTER'; key: T; payload: FilterValue<T> }
+  | { type: 'APPLY_TEMP_FILTER'; payload: FilterState<T> }
+  | { type: 'RESET_STATE' }
+  | { type: 'REMOVE_FILTER_ITEM'; key: T; index: number };
+
+const createInitialState = <T extends string>(keys: T[]): FilterState<T> => {
+  return keys.reduce(
+    (acc, key) => ({ ...acc, [key]: [] }),
+    {} as FilterState<T>
+  );
+};
+
+const filterReducer = <T extends string>(
+  state: FilterState<T>,
+  action: FilterAction<T>
+): FilterState<T> => {
+  switch (action.type) {
+    case 'SET_FILTER':
+      return { ...state, [action.key]: action.payload };
+
+    case 'REMOVE_FILTER_ITEM':
+      return {
+        ...state,
+        [action.key]: state[action.key].filter((_, i) => i !== action.index),
+      };
+    case 'APPLY_TEMP_FILTER':
+      return action.payload;
+    case 'RESET_STATE':
+      return createInitialState(Object.keys(state) as T[]);
+
+    default:
+      return state;
+  }
+};
+```
+
+전체 코드는 아래와 같습니다.
+
+```tsx
+import { useCallback, useReducer, useState } from 'react';
+
+export type FilterValue<T> = T extends
+  | 'energySource'
+  | 'equipmentPurpose'
+  | 'measurementPointCollectionType'
+  | 'measurementPointCycle'
+  ? string[]
+  : string[][];
+
+export type FilterState<T extends string> = {
+  [K in T]: FilterValue<K>;
+};
+
+type FilterAction<T extends string> =
+  | { type: 'SET_FILTER'; key: T; payload: FilterValue<T> }
+  | { type: 'APPLY_TEMP_FILTER'; payload: FilterState<T> }
+  | { type: 'RESET_STATE' }
+  | { type: 'REMOVE_FILTER_ITEM'; key: T; index: number };
+
+const createInitialState = <T extends string>(keys: T[]): FilterState<T> => {
+  return keys.reduce(
+    (acc, key) => ({ ...acc, [key]: [] }),
+    {} as FilterState<T>
+  );
+};
+
+const filterReducer = <T extends string>(
+  state: FilterState<T>,
+  action: FilterAction<T>
+): FilterState<T> => {
+  switch (action.type) {
+    case 'SET_FILTER':
+      return { ...state, [action.key]: action.payload };
+
+    case 'REMOVE_FILTER_ITEM':
+      return {
+        ...state,
+        [action.key]: state[action.key].filter((_, i) => i !== action.index),
+      };
+    case 'APPLY_TEMP_FILTER':
+      return action.payload;
+    case 'RESET_STATE':
+      return createInitialState(Object.keys(state) as T[]);
+
+    default:
+      return state;
+  }
+};
+
+export default function useGeneralFilterState<T extends string>(
+  filterKeys: T[]
+) {
+  const initialState = createInitialState(filterKeys);
+  const [filterState, filterDispatch] = useReducer(
+    filterReducer<T>,
+    initialState
+  );
+  const [tempFilterState, setTempFilterState] =
+    useState<FilterState<T>>(initialState);
+
+  const openFilter = useCallback(() => {
+    setTempFilterState(filterState);
+  }, [filterState]);
+
+  const applyFilter = useCallback(() => {
+    filterDispatch({ type: 'APPLY_TEMP_FILTER', payload: tempFilterState });
+  }, [tempFilterState]);
+
+  const resetTempFilter = useCallback(() => {
+    setTempFilterState(initialState);
+  }, [initialState]);
+
+  const handleRemoveFilter = useCallback(
+    (key: T, index: number) => {
+      filterDispatch({ type: 'REMOVE_FILTER_ITEM', key, index });
+    },
+    [filterState]
+  );
+
+  const handleRemoveTempFilter = useCallback((key: T, index: number) => {
+    setTempFilterState((prev) => {
+      const newState = { ...prev };
+      const value = newState[key];
+
+      if (
+        key === 'energySource' ||
+        key === 'equipmentPurpose' ||
+        key === 'measurementPointCollectionType' ||
+        key === 'measurementPointCycle'
+      ) {
+        newState[key] = (value as string[]).filter(
+          (_, i) => i !== index
+        ) as FilterValue<T>;
+      } else {
+        newState[key] = (value as string[][]).filter(
+          (_, i) => i !== index
+        ) as FilterValue<T>;
+      }
+
+      return newState;
+    });
+  }, []);
+
+  return {
+    filterState,
+    tempFilterState,
+    setTempFilterState,
+    openFilter,
+    applyFilter,
+    resetTempFilter,
+    handleRemoveFilter,
+    handleRemoveTempFilter,
+  };
+}
+```
+
+useReducer와 custom hook을 사용한 필터 state 관리 방법 글을 마치겠습니다.
+
+감사합니다!
