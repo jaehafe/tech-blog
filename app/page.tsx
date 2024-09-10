@@ -14,18 +14,24 @@ export default function Home() {
           <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-balance">
             Hello, I&apos;m Jaeha
           </h1>
-          <p className="max-w-[42rem] mx-auto text-muted-foreground sm:text-xl text-balance">
+          {/* <p className="max-w-[42rem] mx-auto text-muted-foreground sm:text-xl text-balance">
             Welcome to my tech blog. Built using tailwind, shadcn, velite and Nextjs 14.
-          </p>
+          </p> */}
           <div className="flex flex-col gap-4 justify-center sm:flex-row">
-            <Link href="/blog" className={cn(buttonVariants({ size: 'lg' }), 'w-full sm:w-fit')}>
+            <Link
+              href="/blog"
+              className={cn(buttonVariants({ size: 'lg' }), 'w-full sm:w-fit')}
+            >
               전투일지 보러가기
             </Link>
             <Link
               href={siteConfig.links.github}
               target="_blank"
               rel="noreferrer"
-              className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'w-full sm:w-fit')}
+              className={cn(
+                buttonVariants({ variant: 'outline', size: 'lg' }),
+                'w-full sm:w-fit'
+              )}
             >
               GitHub
             </Link>
@@ -33,7 +39,9 @@ export default function Home() {
         </div>
       </section>
       <section className="container max-w-4xl py-6 lg:py-10 flex flex-col space-y-6 mt-60">
-        <h2 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-center">Latest Posts</h2>
+        <h2 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-center">
+          Latest Posts
+        </h2>
         <ul className="flex flex-col">
           {latestPosts.map((post) => (
             <li key={post.slug} className="first:border-t first:border-border">
