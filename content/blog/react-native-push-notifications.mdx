@@ -30,6 +30,19 @@ yarn add @notifee/react-native @react-native-async-storage/async-storage @react-
   "@react-native-firebase/messaging": "^20.4.0",
 ```
 
+auto linking을 해주기 위해 다음 명령어를 실행합니다.
+
+```bash
+cd ios && pod install && cd ..
+```
+
+그리고 ios/Podfile에 다음과 같이 추가해줍니다.
+
+```ruby
+pod 'GoogleUtilities', :modular_headers => true
+pod 'FirebaseCore', :modular_headers => true
+```
+
 ## 2. firebase 설정하기
 
 - 프로젝트 만들기
